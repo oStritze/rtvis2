@@ -1,0 +1,233 @@
+﻿<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+body {
+  font: 10px sans-serif;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #888;
+  shape-rendering: crispEdges;
+}
+
+</style>
+<body>
+    <script src="http://d3js.org/d3.v2.js"></script>
+    <script src="{{url_for('static', filename='three.min.js')}}"></script>
+    <script id="vertexShader" type="x-shader/x-vertex">
+
+        varying vec2 vertexUV;
+
+        void main() {
+            vertexUV = uv;
+            gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(position, 1.0);
+        }
+
+    </script>
+
+    <script id="fragmentShader" type="x-shader/x-fragment">
+
+        varying vec2 vertexUV;
+
+        uniform sampler2D kdeResult;
+        uniform float maxIntensity;
+        uniform sampler2D colorbarImage;
+
+        void main() {
+            //Task 2 - Calculate the corresponding value for the colorbar and set the color to the fragment
+        }
+
+    </script>
+
+    <script>
+
+        var margin = { top: 20, right: 20, bottom: 30, left: 40 },
+            width = 500 - margin.left - margin.right,
+            height = 500 - margin.top - margin.bottom;
+               
+        // histogram parameters
+        var minX = -100;
+        var minY = -100;
+        var maxX = 600;
+        var maxY = 600;
+        var resolution = 64;
+
+        var startX = 0;
+        var startY = 0;
+        var mouseDown = false;
+        var needRedrawing = false;
+
+        var maxIntensity = 600;
+
+        var drawContextInitialized = false;
+        
+        var scene, camera, renderer;
+        var texData;
+        var dataTexture;
+        var material;
+        var geometry, mesh;
+
+        // query data from server using d3
+
+        function queryData() {
+
+            d3.json("/data/" + resolution + "/" + minX + "/" + maxX + "/" + minY + "/" + maxY + "", function (data) {
+
+                // coordinate conversions
+                var x = d3.scale.linear()
+                    .domain([data.minX, data.maxX])
+                    .range([0, width]);
+
+                var y = d3.scale.linear()
+                    .domain([data.minY, data.maxY])
+                    .range([height, 0]);
+
+                d3.select("svg").remove();
+
+                var svg = d3.select("body").append("svg")
+                    .attr("width", width + margin.left + margin.right)
+                    .attr("height", height + margin.top + margin.bottom)
+                    .append("g")
+                    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+                // d3 axes
+                var xAxis = d3.svg.axis()
+                    .scale(x)
+                    .orient("bottom");
+
+                var yAxis = d3.svg.axis()
+                    .scale(y)
+                    .orient("left");
+
+                svg.append("g")
+                    .attr("class", "x axis")
+                    .attr("transform", "translate(0," + height + ")")
+                    .attr("fill", "#888")
+                    .call(xAxis)
+                    .append("text")
+                    .attr("class", "label")
+                    .attr("x", width)
+                    .attr("y", -6)
+                    .style("text-anchor", "end")
+                    .text("departure delay (mins)");
+
+                svg.append("g")
+                    .attr("class", "y axis")
+                    .attr("fill", "#888")
+                    .call(yAxis)
+                    .append("text")
+                    .attr("class", "label")
+                    .attr("transform", "rotate(-90)")
+                    .attr("y", 6)
+                    .attr("dy", ".71em")
+                    .style("text-anchor", "end")
+                    .text("arrival delay (mins)");
+
+
+               
+                var texSize = data.histogram.length;
+                var texWidth = Math.sqrt(texSize);
+                maxIntensity = data.maxBin; 
+
+                // histogram data
+                texData = new Float32Array(data.histogram);
+
+                // histogram data texture
+                dataTexture = new THREE.DataTexture(texData, texWidth, texWidth, THREE.LuminanceFormat, THREE.FloatType);
+                dataTexture.wrapS = THREE.ClampToEdgeWrapping;
+                dataTexture.wrapT = THREE.ClampToEdgeWrapping;
+                dataTexture.repeat.set(1, 1);
+                dataTexture.needsUpdate = true;
+
+                // ortho camera
+                camera = new THREE.OrthographicCamera(-width / 2, width / 2, height / 2, -height / 2, 1, 1000);
+                camera.position.z = 1000;
+
+                // quad geometry
+                geometry = new THREE.PlaneGeometry(width, height, 1, 1);
+
+                // Task 2 - Set the shaders in the material
+                material = new THREE.MeshBasicMaterial({ wireframe: false, map: dataTexture });                
+               
+                // mesh
+                mesh = new THREE.Mesh(geometry, material);
+
+                // scene
+                scene = new THREE.Scene();
+                scene.add(mesh);
+
+
+                if (!drawContextInitialized) {
+                    // renderer
+                    renderer = new THREE.WebGLRenderer();
+                    renderer.setSize(width, height);
+
+                    // renderer placement
+                    renderer.domElement.style.position = "absolute";
+                    renderer.domElement.style.top = (margin.top + 8) + "px";
+                    renderer.domElement.style.left = (margin.left + 8) + "px";
+                    renderer.domElement.style.zIndex = "-1";
+
+                    // append renderer to DOM
+                    document.body.appendChild(renderer.domElement);
+                    drawContextInitialized = true;
+                }                
+
+                new THREE.TextureLoader().load("./verlauf", function (texture) {
+                    colorbarImage = texture;
+                    colorbarImage.wrapS = THREE.ClampToEdgeWrapping;
+                    colorbarImage.wrapT = THREE.ClampToEdgeWrapping;
+                    colorbarImage.magFilter = THREE.LinearFilter;
+                    colorbarImage.minFilter = THREE.LinearFilter;
+                    colorbarImage.repeat.set(1, 1);
+                    colorbarImage.needsUpdate = true;
+
+                    uniform = {
+                        kdeResult: {
+                            value: dataTexture
+                        },
+                        colorbarImage: {
+                            value: colorbarImage
+                        },
+                        maxIntensity: {
+                            value: maxIntensity
+                        }
+                    };
+
+                    material.uniforms = uniform;
+                    material.needsUpdate = true;
+                    mesh.needsUpdate = true;
+                    renderer.render(scene, camera);
+                });
+                
+                needRedrawing = false;
+
+            });
+        }
+
+
+        window.onmousedown = function (evt) {
+            // Task 1 - Implement panning and zooming
+        }
+
+        window.onmouseup = function () {
+            // Task 1 - Implement panning and zooming
+        }
+
+        window.onmousemove = function (evt) {
+            // Task 1 - Implement panning and zooming
+        }
+
+        window.onwheel = function (evt) {
+            // Task 1 - Implement panning and zooming
+        }
+
+        queryData();
+
+    </script>
+
+
+</body>
