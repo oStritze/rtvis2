@@ -38,6 +38,7 @@ body {
 
         void main() {
             //Task 2 - Calculate the corresponding value for the colorbar and set the color to the fragment
+            
         }
 
     </script>
@@ -45,8 +46,8 @@ body {
     <script>
 
         var margin = { top: 20, right: 20, bottom: 30, left: 40 },
-            width = 500 - margin.left - margin.right,
-            height = 500 - margin.top - margin.bottom;
+            width = 650 - margin.left - margin.right,
+            height = 650 - margin.top - margin.bottom;
                
         // histogram parameters
         var minX = -100;
@@ -208,21 +209,80 @@ body {
             });
         }
 
-
+        var moveStartX;
+        var moveStartY;
+        var diffScale = 0.66;
+        
         window.onmousedown = function (evt) {
             // Task 1 - Implement panning and zooming
+
+            mouseDown = true;
+
+            moveStartX = evt.x;
+            moveStartY = evt.y;
+
+            //console.log("mousedown" + " " + moveStartX + " " + moveStartY);
+
+            //queryData();
         }
 
-        window.onmouseup = function () {
+        window.onmouseup = function (evt) {
             // Task 1 - Implement panning and zooming
+
+            mouseDown = false;
+
+            var moveEndX = evt.x;
+            var moveEndY = evt.y;
+
+            var diffX = moveEndX - moveStartX;
+            var diffY = moveEndY - moveStartY;
+
+            //console.log("mouseup" + " " + diffX + " " + diffY);
+            minX = Math.round(minX - diffX*diffScale);
+            minY = Math.round(minY + diffY*diffScale);
+            maxX = Math.round(maxX - diffX*diffScale);
+            maxY = Math.round(maxY + diffY*diffScale);
+            // maybe do something with 
+            queryData();
         }
 
         window.onmousemove = function (evt) {
             // Task 1 - Implement panning and zooming
+
+            // smoothly change the view over movements, uncomment when performance is shiat
+            // or make use of the needRedraw boolean
+            if (mouseDown){
+                var moveEndX = evt.x;
+                var moveEndY = evt.y;
+
+                var diffX = moveEndX - moveStartX;
+                var diffY = moveEndY - moveStartY;
+
+                moveStartX = moveEndX;
+                moveStartY = moveEndY;
+
+                //console.log("mousemove" + " " + diffX + " " + diffY);
+                minX = Math.round(minX - diffX*diffScale);
+                minY = Math.round(minY + diffY*diffScale);
+                maxX = Math.round(maxX - diffX*diffScale);
+                maxY = Math.round(maxY + diffY*diffScale);
+                queryData();
+            }
+            //queryData();
         }
 
         window.onwheel = function (evt) {
             // Task 1 - Implement panning and zooming
+            var delY = evt.deltaY;
+            var delX = evt.deltaX;
+
+            var scale = 0.25;
+            minX = Math.round(minX + delY*scale);
+            minY = Math.round(minY + delY*scale);
+            maxX = Math.round(maxX - delY*scale);
+            maxY = Math.round(maxY - delY*scale);
+
+            queryData();
         }
 
         queryData();

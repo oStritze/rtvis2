@@ -5,7 +5,7 @@ import math
 import numpy as np
 
 #Task4 - Import pyopencl here
-#import pyopencl as cl
+import pyopencl as cl
 import time
 from flask import send_file
 
@@ -22,6 +22,8 @@ def index():
 @app.route("/verlauf")
 def verlauf():
     return send_file("templates/verlauf.jpg", mimetype='image/jpg')
+#    return send_file("templates/mako.png", mimetype='image/jpg')
+
 
 def gaussKernel(x, y, centerX, centerY, sigma):
     
@@ -33,6 +35,7 @@ def gaussKernel(x, y, centerX, centerY, sigma):
 @app.route("/data/<int:numBins>/<string:minX>/<string:maxX>/<string:minY>/<string:maxY>")
 def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500):
     histogram = np.zeros((numBins , numBins), dtype = np.float)    
+    #print(minY, maxY, minX, maxX)
     minArr = int(minY)
     maxArr = int(maxY)
     rangeArr = maxArr - minArr
@@ -76,14 +79,15 @@ if __name__ == "__main__":
     # perform db query 
 
     print("start db query")    
-    conn = sqlite3.connect("flights.db")
+    conn = sqlite3.connect("data/flights.db")
     cursor = conn.cursor()
 
+    sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real') LIMIT 1000"
     # this query is slow at server start-up, but the histogram is quick to compute on the CPU
     #sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real')  ORDER BY RANDOM() LIMIT 50000"
     # this query is quick, but just gives us the first 50000 items (remove the LIMITS 50000 to get all data points)
     # Task 3 - Lower the number of datapoints, set LIMIT to 10
-    sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real') LIMIT 1000"
+
     cursor.execute(sql)
     data = cursor.fetchall()
 
