@@ -38,6 +38,13 @@ body {
 
         void main() {
             //Task 2 - Calculate the corresponding value for the colorbar and set the color to the fragment
+
+            // texture.st gives the texture coords, in our case the value in the array :-)
+            float thiskde = texture2D(kdeResult, vertexUV).s;
+            // scale between 0.0 and 1.0 by dividing through maxIntensity
+            float thiscol = thiskde/maxIntensity; 
+            // color fragment as per colorbar specified
+            gl_FragColor = texture2D(colorbarImage, vec2(thiscol, 1.0));
             
         }
 
@@ -62,6 +69,9 @@ body {
         var needRedrawing = false;
 
         var maxIntensity = 600;
+
+        // ToDO: add more and switch case for bonus points later on...
+        const this_colorbarImage = new THREE.TextureLoader().load( 'verlauf' ); 
 
         var drawContextInitialized = false;
         
@@ -150,9 +160,29 @@ body {
                 // quad geometry
                 geometry = new THREE.PlaneGeometry(width, height, 1, 1);
 
+                //console.log(dataTexture);
+                
                 // Task 2 - Set the shaders in the material
-                material = new THREE.MeshBasicMaterial({ wireframe: false, map: dataTexture });                
-               
+                //material = new THREE.MeshBasicMaterial({ wireframe: false, map: dataTexture });    
+                // add shader material with vertex and fragmentshader, define uniforms            
+                material = new THREE.ShaderMaterial( {
+                    uniforms: {
+                        kdeResult: {
+                            value: dataTexture
+                        },
+                        colorbarImage: {
+                            value: this_colorbarImage
+                        },
+                        maxIntensity: {
+                            value: maxIntensity
+                        }
+                    },
+                    vertexShader: document.getElementById( 'vertexShader' ).textContent,
+                    fragmentShader: document.getElementById( 'fragmentShader' ).textContent
+
+                    } 
+                );
+
                 // mesh
                 mesh = new THREE.Mesh(geometry, material);
 
@@ -177,6 +207,7 @@ body {
                     drawContextInitialized = true;
                 }                
 
+                // i don't think this does anything at all now after adding the shaderMaterial above
                 new THREE.TextureLoader().load("./verlauf", function (texture) {
                     colorbarImage = texture;
                     colorbarImage.wrapS = THREE.ClampToEdgeWrapping;
@@ -222,7 +253,6 @@ body {
             moveStartY = evt.y;
 
             //console.log("mousedown" + " " + moveStartX + " " + moveStartY);
-
             //queryData();
         }
 
@@ -242,7 +272,6 @@ body {
             minY = Math.round(minY + diffY*diffScale);
             maxX = Math.round(maxX - diffX*diffScale);
             maxY = Math.round(maxY + diffY*diffScale);
-            // maybe do something with 
             queryData();
         }
 
@@ -287,7 +316,19 @@ body {
 
         queryData();
 
-    </script>
+        /* load shader source code. */
+        //gl.shaderSource(shader, vertexShader);
 
+        /* compile shader source code. */
+        //gl.compileShader(vertexShader);
+
+        //var message = gl.getShaderInfoLog(vertexShader);
+
+        //if (message.length > 0) {
+        /* message may be an error or a warning */
+        //throw message;
+        //}
+
+    </script>
 
 </body>
