@@ -42,7 +42,8 @@ body {
             // texture.st gives the texture coords, in our case the value in the array :-)
             float thiskde = texture2D(kdeResult, vertexUV).s;
             // scale between 0.0 and 1.0 by dividing through maxIntensity
-            float thiscol = thiskde/maxIntensity; 
+            //float thiscol = thiskde/maxIntensity; 
+            float thiscol = log(thiskde)/log(maxIntensity);
             // color fragment as per colorbar specified
             gl_FragColor = texture2D(colorbarImage, vec2(thiscol, 1.0));
             
@@ -295,7 +296,7 @@ body {
                 minY = Math.round(minY + diffY*diffScale);
                 maxX = Math.round(maxX - diffX*diffScale);
                 maxY = Math.round(maxY + diffY*diffScale);
-                queryData();
+                //queryData();
             }
             //queryData();
         }
