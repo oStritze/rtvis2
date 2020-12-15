@@ -1,5 +1,8 @@
 ﻿<!DOCTYPE html>
 <meta charset="utf-8">
+<head>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.5.3/dist/css/bootstrap.min.css" integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2" crossorigin="anonymous">
+</head>
 <style>
 
 body {
@@ -13,8 +16,36 @@ body {
   shape-rendering: crispEdges;
 }
 
+/* form {
+    margin-left: 700px;
+    margin-bottom: 0px;
+}
+.div-1 {
+    margin-left: 700px;
+    font: 12px sans-serif;
+} */
+
 </style>
 <body>
+
+<!-- 
+    <div class="div-1" id="computing_hint", style="visibility: visible">
+        <p>computing...</p>
+    </div>
+
+    <form>
+        <div class="form-row align-items-center">
+            <div class="col-auto my-1">
+              <label class="mr-sm-2 sr-only" for="inlineFormCustomSelect">Select Colormap</label>
+              <select class="custom-select mr-sm-2" id="colormap">
+                <option value="viridis">Viridis</option>
+                <option value="mako">Mako</option>
+                <option value="magma">Magma</option>
+              </select>
+            </div>
+    </form> -->
+
+
     <script src="http://d3js.org/d3.v2.js"></script>
     <script src="{{url_for('static', filename='three.min.js')}}"></script>
     <script id="vertexShader" type="x-shader/x-vertex">
@@ -43,7 +74,9 @@ body {
             float thiskde = texture2D(kdeResult, vertexUV).s;
             // scale between 0.0 and 1.0 by dividing through maxIntensity
             //float thiscol = thiskde/maxIntensity; 
-            float thiscol = log(thiskde)/log(maxIntensity);
+            //float thiscol = log(thiskde+1.0)/log(maxIntensity+1.0);
+            float thiscol = log(thiskde*10000000.0)/log(maxIntensity*10000000.0);
+
             // color fragment as per colorbar specified
             gl_FragColor = texture2D(colorbarImage, vec2(thiscol, 1.0));
             
@@ -72,7 +105,7 @@ body {
         var maxIntensity = 600;
 
         // ToDO: add more and switch case for bonus points later on...
-        const this_colorbarImage = new THREE.TextureLoader().load( 'verlauf' ); 
+        const this_colorbarImage = new THREE.TextureLoader().load( './verlauf' ); 
 
         var drawContextInitialized = false;
         
@@ -85,6 +118,8 @@ body {
         // query data from server using d3
 
         function queryData() {
+
+            //document.getElementById("computing_hint").style.visibility = "visible";
 
             d3.json("/data/" + resolution + "/" + minX + "/" + maxX + "/" + minY + "/" + maxY + "", function (data) {
 
@@ -142,7 +177,9 @@ body {
                
                 var texSize = data.histogram.length;
                 var texWidth = Math.sqrt(texSize);
-                maxIntensity = data.maxBin; 
+                //console.log(data.maxBin);
+                //console.log(data.maxVal);
+                maxIntensity = data.maxVal; 
 
                 // histogram data
                 texData = new Float32Array(data.histogram);
@@ -162,22 +199,12 @@ body {
                 geometry = new THREE.PlaneGeometry(width, height, 1, 1);
 
                 //console.log(dataTexture);
+                //console.log(maxIntensity);
                 
                 // Task 2 - Set the shaders in the material
                 //material = new THREE.MeshBasicMaterial({ wireframe: false, map: dataTexture });    
                 // add shader material with vertex and fragmentshader, define uniforms            
                 material = new THREE.ShaderMaterial( {
-                    uniforms: {
-                        kdeResult: {
-                            value: dataTexture
-                        },
-                        colorbarImage: {
-                            value: this_colorbarImage
-                        },
-                        maxIntensity: {
-                            value: maxIntensity
-                        }
-                    },
                     vertexShader: document.getElementById( 'vertexShader' ).textContent,
                     fragmentShader: document.getElementById( 'fragmentShader' ).textContent
 
@@ -199,8 +226,9 @@ body {
 
                     // renderer placement
                     renderer.domElement.style.position = "absolute";
-                    renderer.domElement.style.top = (margin.top + 8) + "px";
-                    renderer.domElement.style.left = (margin.left + 8) + "px";
+                    renderer.domElement.style.top = (margin.top ) + "px";
+                    //renderer.domElement.style.top = (margin.top + 72) + "px";
+                    renderer.domElement.style.left = (margin.left ) + "px";
                     renderer.domElement.style.zIndex = "-1";
 
                     // append renderer to DOM
@@ -208,8 +236,10 @@ body {
                     drawContextInitialized = true;
                 }                
 
-                // i don't think this does anything at all now after adding the shaderMaterial above
-                new THREE.TextureLoader().load("./verlauf", function (texture) {
+                var colorbar = "./viridis";
+                //colorbar = document.getElementById()
+
+                new THREE.TextureLoader().load(colorbar, function (texture) {
                     colorbarImage = texture;
                     colorbarImage.wrapS = THREE.ClampToEdgeWrapping;
                     colorbarImage.wrapT = THREE.ClampToEdgeWrapping;
@@ -237,6 +267,8 @@ body {
                 });
                 
                 needRedrawing = false;
+                //document.getElementById("computing_hint").style.visibility =  "hidden";
+
 
             });
         }
@@ -312,23 +344,11 @@ body {
             maxX = Math.round(maxX - delY*scale);
             maxY = Math.round(maxY - delY*scale);
 
-            queryData();
+            //queryData();
         }
 
         queryData();
 
-        /* load shader source code. */
-        //gl.shaderSource(shader, vertexShader);
-
-        /* compile shader source code. */
-        //gl.compileShader(vertexShader);
-
-        //var message = gl.getShaderInfoLog(vertexShader);
-
-        //if (message.length > 0) {
-        /* message may be an error or a warning */
-        //throw message;
-        //}
 
     </script>
 

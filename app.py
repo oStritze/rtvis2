@@ -4,6 +4,9 @@ import sqlite3
 import math
 import numpy as np
 
+#import scipy for now...
+from scipy.stats import norm
+
 #Task4 - Import pyopencl here
 import pyopencl as cl
 import time
@@ -22,16 +25,26 @@ def index():
 @app.route("/verlauf")
 def verlauf():
     return send_file("templates/verlauf.jpg", mimetype='image/jpg')
-#    return send_file("templates/mako.png", mimetype='image/jpg')
+
+@app.route("/viridis")
+def verlauf1():
+    return send_file("templates/viridis.jpg", mimetype='image/jpg')
+# @app.route("/mako")
+# def verlauf2():
+#     return send_file("templates/mako.jpg", mimetype='image/jpg')
+# @app.route("/magma")
+# def verlauf3():
+#     return send_file("templates/magma.jpg", mimetype='image/jpg')
 
 
-def gaussKernel(x, y, centerX, centerY, sigma, n):
-    ## added n as per formula
+def gaussKernel(x, y, centerX, centerY, sigma):
     # Task 3 - Calculate the value for the current bin and observation for the naive CPU KDE
     val = 0.0
-    val += abs( 1/(sigma * n) * ((centerX - x)/sigma) )
-    #print(centerX, x, centerY, y, val)
-    val += abs ( 1/(sigma * n) * ((centerY - y)/sigma) )
+    # calculate the distance from center to point, that is the euclidian here
+    center = np.array((centerX, centerY))
+    point = np.array((x, y))
+    dist = np.linalg.norm(center-point) / sigma
+    val += norm.pdf(dist, 0, 1) 
     return val
 
 @app.route("/data")
@@ -45,7 +58,7 @@ def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500, sigma=10):
     minDep = int(minX)
     maxDep = int(maxX)
     rangeDep = maxDep - minDep            
-    maxBin = 0   
+    maxBin = 0 
     
 
     # create the 2D histogram 
@@ -72,6 +85,29 @@ def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500, sigma=10):
     _sigma = sigma # from function definition, default is 10
     n = len(data)
 
+    ## try more "simple" approach as proposed in exercise handout...
+    stepX = math.floor(rangeX/numBins)
+    stepY = math.floor(rangeY/numBins)
+    for _x in range(numBins):
+        for _y in range(numBins):
+            thisX = ((minDep + _x*stepX) )
+            thisY = ((minArr + _y*stepY) ) 
+            for row in data:
+                val = gaussKernel(row[0], row[1], thisX, thisY, _sigma)
+                histogram[_y, _x] += val/_sigma
+
+    histogram = histogram/n #as per formula, divide by n
+    maxBin = np.max(histogram)
+
+    ## DEBUG
+    #print(maxBin)
+    #print(data)
+    #ind = np.where(histogram == np.max(histogram))
+    #print(ind)
+    #rng = 3
+    #print(histogram[int(ind[0])-rng:int(ind[0])+rng+1, int(ind[1])-rng:int(ind[1])+rng+1])
+
+    """
     ## the algorithm can be accelerated by not going through all bins but only the next [sigma] bins 
     ## to a data point, since the gaussian kernel is distributed around its mean equally by the variance/sigma.
     ## Also bins that are not in the range of the view are skipped since they would not be visualized
@@ -90,10 +126,12 @@ def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500, sigma=10):
     #print(histogram.shape)
     maxBin = np.max(histogram) 
     #print(maxBin)
+    """
 
     #Task 4 - Create the buffers, execute the OpenCL code and fetch the results 
-                    
-    return json.dumps({"minX": minDep, "maxX": maxDep, "minY": minArr, "maxY": maxArr, "maxBin": int(maxBin), "histogram": histogram.ravel().tolist()})
+    
+    return json.dumps({"minX": minDep, "maxX": maxDep, "minY": minArr, "maxY": maxArr, "maxVal": maxBin, "maxBin": int(maxBin), "histogram": histogram.ravel().tolist()})                
+    #return json.dumps({"minX": minDep, "maxX": maxDep, "minY": minArr, "maxY": maxArr, "maxBin": int(maxBin), "histogram": histogram.ravel().tolist()})
 
 if __name__ == "__main__":
     import os
@@ -108,7 +146,7 @@ if __name__ == "__main__":
     conn = sqlite3.connect("data/flights.db")
     cursor = conn.cursor()
 
-    sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real') LIMIT 10"
+    sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real') LIMIT 1"
     # this query is slow at server start-up, but the histogram is quick to compute on the CPU
     #sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real')  ORDER BY RANDOM() LIMIT 50000"
     # this query is quick, but just gives us the first 50000 items (remove the LIMITS 50000 to get all data points)
