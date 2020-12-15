@@ -48,7 +48,7 @@ def gaussKernel(x, y, centerX, centerY, sigma):
     return val
 
 @app.route("/data")
-@app.route("/data/<int:numBins>/<string:minX>/<string:maxX>/<string:minY>/<string:maxY>")
+@app.route("/data/<int:numBins>/<string:minX>/<string:maxX>/<string:minY>/<string:maxY>/<int:sigma>")
 def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500, sigma=10):
     histogram = np.zeros((numBins , numBins), dtype = np.float)    
     #print(minY, maxY, minX, maxX)

@@ -33,6 +33,10 @@ form {
         <p>computing...</p>
     </div>
 
+    <div class="div-1">
+        Select Colorbar && Sigma: 
+    </div>
+
     <form>
         <div class="form-row align-items-center">
             <div class="col-auto my-1">
@@ -43,6 +47,9 @@ form {
                 <option value="./magma">Magma</option>
               </select>
             </div>
+            <input type="range" min="1" max="30" value="10" class="slider" id="sigma" onchange="queryData()"
+            oninput="this.nextElementSibling.value = this.value">
+            <output>10</output>
     </form>
 
 
@@ -96,6 +103,7 @@ form {
         var maxX = 600;
         var maxY = 600;
         var resolution = 64;
+        var sigma = 10;
 
         var startX = 0;
         var startY = 0;
@@ -103,9 +111,6 @@ form {
         var needRedrawing = false;
 
         var maxIntensity = 600;
-
-        // ToDO: add more and switch case for bonus points later on...
-        const this_colorbarImage = new THREE.TextureLoader().load( './verlauf' ); 
 
         var drawContextInitialized = false;
         
@@ -121,7 +126,9 @@ form {
 
             document.getElementById("computing_hint").style.visibility = "visible";
 
-            d3.json("/data/" + resolution + "/" + minX + "/" + maxX + "/" + minY + "/" + maxY + "", function (data) {
+            sigma = document.getElementById("sigma").value;
+
+            d3.json("/data/" + resolution + "/" + minX + "/" + maxX + "/" + minY + "/" + maxY + "/" + sigma + "", function (data) {
 
                 // coordinate conversions
                 var x = d3.scale.linear()
@@ -226,7 +233,7 @@ form {
 
                     // renderer placement
                     renderer.domElement.style.position = "absolute";
-                    renderer.domElement.style.top = (margin.top + 76) + "px";
+                    renderer.domElement.style.top = (margin.top + 90) + "px";
                     //renderer.domElement.style.top = (margin.top + 72) + "px";
                     renderer.domElement.style.left = (margin.left ) + "px";
                     renderer.domElement.style.zIndex = "-1";
