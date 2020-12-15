@@ -29,12 +29,12 @@ def verlauf():
 @app.route("/viridis")
 def verlauf1():
     return send_file("templates/viridis.jpg", mimetype='image/jpg')
-# @app.route("/mako")
-# def verlauf2():
-#     return send_file("templates/mako.jpg", mimetype='image/jpg')
-# @app.route("/magma")
-# def verlauf3():
-#     return send_file("templates/magma.jpg", mimetype='image/jpg')
+@app.route("/mako")
+def verlauf2():
+    return send_file("templates/mako.jpg", mimetype='image/jpg')
+@app.route("/magma")
+def verlauf3():
+    return send_file("templates/magma.jpg", mimetype='image/jpg')
 
 
 def gaussKernel(x, y, centerX, centerY, sigma):
