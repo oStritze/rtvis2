@@ -5,7 +5,7 @@ import math
 import numpy as np
 
 #import scipy for now...
-from scipy.stats import norm
+#from scipy.stats import norm
 
 #Task4 - Import pyopencl here
 import pyopencl as cl
@@ -37,14 +37,21 @@ def verlauf3():
     return send_file("templates/magma.jpg", mimetype='image/jpg')
 
 
-def gaussKernel(x, y, centerX, centerY, sigma):
+def gaussKernel(x, y, centerX, centerY, sigma, amp=1):
     # Task 3 - Calculate the value for the current bin and observation for the naive CPU KDE
     val = 0.0
+    ## using scipy
     # calculate the distance from center to point, that is the euclidian here
-    center = np.array((centerX, centerY))
-    point = np.array((x, y))
-    dist = np.linalg.norm(center-point) / sigma
-    val += norm.pdf(dist, 0, 1) 
+    #center = np.array((centerX, centerY))
+    #point = np.array((x, y))
+    #dist = np.linalg.norm(center-point) / sigma
+    #val += norm.pdf(dist, 0, 1) 
+
+    # use 2D gaussian function for the value instead of scipy
+    xterm = (x-centerX)**2 / (2*sigma**2)
+    yterm = (y-centerY)**2 / (2*sigma**2)
+    val = amp * math.exp( -(xterm + yterm) )
+
     return val
 
 @app.route("/data")
@@ -85,7 +92,6 @@ def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500, sigma=10):
     _sigma = sigma # from function definition, default is 10
     n = len(data)
 
-    ## try more "simple" approach as proposed in exercise handout...
     stepX = math.floor(rangeX/numBins)
     stepY = math.floor(rangeY/numBins)
     for _x in range(numBins):
@@ -107,29 +113,8 @@ def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500, sigma=10):
     #rng = 3
     #print(histogram[int(ind[0])-rng:int(ind[0])+rng+1, int(ind[1])-rng:int(ind[1])+rng+1])
 
-    """
-    ## the algorithm can be accelerated by not going through all bins but only the next [sigma] bins 
-    ## to a data point, since the gaussian kernel is distributed around its mean equally by the variance/sigma.
-    ## Also bins that are not in the range of the view are skipped since they would not be visualized
-    for row in data:
-        startX = max(row[0] - _sigma, minX)
-        endX = min(row[0] + _sigma, maxX)
-        startY = max(row[1] - _sigma, minY)
-        endY = min(row[0] + _sigma, maxY)
-
-        for _x in range(startX, endX):
-            for _y in range(startY, endY):
-                hX = math.floor(numBins * ((_x - minDep) / rangeDep))
-                hY = math.floor(numBins * ((_y - minArr) / rangeArr))
-                histogram[hY,hX] += gaussKernel(_x, _y, row[0], row[1], _sigma, n)
-                #print(hY,hX, histogram[hY,hX])
-    #print(histogram.shape)
-    maxBin = np.max(histogram) 
-    #print(maxBin)
-    """
-
     #Task 4 - Create the buffers, execute the OpenCL code and fetch the results 
-    
+
     return json.dumps({"minX": minDep, "maxX": maxDep, "minY": minArr, "maxY": maxArr, "maxVal": maxBin, "maxBin": int(maxBin), "histogram": histogram.ravel().tolist()})                
     #return json.dumps({"minX": minDep, "maxX": maxDep, "minY": minArr, "maxY": maxArr, "maxBin": int(maxBin), "histogram": histogram.ravel().tolist()})
 
@@ -146,7 +131,7 @@ if __name__ == "__main__":
     conn = sqlite3.connect("data/flights.db")
     cursor = conn.cursor()
 
-    sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real') LIMIT 1"
+    sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real') LIMIT 10"
     # this query is slow at server start-up, but the histogram is quick to compute on the CPU
     #sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real')  ORDER BY RANDOM() LIMIT 50000"
     # this query is quick, but just gives us the first 50000 items (remove the LIMITS 50000 to get all data points)
