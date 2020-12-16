@@ -114,6 +114,32 @@ def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500, sigma=10):
     #print(histogram[int(ind[0])-rng:int(ind[0])+rng+1, int(ind[1])-rng:int(ind[1])+rng+1])
 
     #Task 4 - Create the buffers, execute the OpenCL code and fetch the results 
+    ctx = cl.create_some_context()
+    queue = cl.CommandQueue(ctx)
+
+    mf = cl.mem_flags
+    a_g = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=histogram)
+    b_g = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=histogram)
+    
+    prg = cl.Program(ctx, """
+    __kernel void sum(
+        __global const float *a_g, __global const float *b_g, __global float *res_g)
+    {
+    int gid = get_global_id(0);
+    res_g[gid] = a_g[gid] + b_g[gid];
+    }
+    """).build()
+
+    res_g = cl.Buffer(ctx, mf.WRITE_ONLY, histogram.nbytes)
+    prg.sum(queue, histogram.shape, None, a_g, b_g, res_g)
+
+    res_np = np.empty_like(histogram)
+    cl.enqueue_copy(queue, res_np, res_g)
+    
+    print(np.max(histogram))
+    print(np.max(res_np))
+    print(np.where(histogram == np.max(histogram)))
+    print(np.where(res_np == np.max(res_np)))
 
     return json.dumps({"minX": minDep, "maxX": maxDep, "minY": minArr, "maxY": maxArr, "maxVal": maxBin, "maxBin": int(maxBin), "histogram": histogram.ravel().tolist()})                
     #return json.dumps({"minX": minDep, "maxX": maxDep, "minY": minArr, "maxY": maxArr, "maxBin": int(maxBin), "histogram": histogram.ravel().tolist()})
@@ -144,6 +170,16 @@ if __name__ == "__main__":
     print("data stored")
 
     #Task 4 - Setup and configure pyopencl
+    clProgram = cl.Program(ctx, """
+    float isotropicGaussKernel2DCL(float x, float y, float center_x, float center_y, float sigma)
+    {
+
+    }
+    __kernel void DensityEstimation(__global float *observationsX, __global float *observationsY, unsigned long numObservations,
+    float sigma, float minX, float maxX, float minY, float maxY, __global float *kde_image, unsigned long numBins) {
+
+    }
+    """).build()
 
     # Set up the development server on port 8002.
     app.debug = False
