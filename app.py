@@ -9,6 +9,10 @@ import numpy as np
 
 #Task4 - Import pyopencl here
 import pyopencl as cl
+import os
+# for mac to use the gpu, use this to avoid being asked for devices:
+os.environ["PYOPENCL_CTX"] = "0:1"
+os.environ["PYOPENCL_COMPILER_OUTPUT"] = "1" 
 import time
 from flask import send_file
 
@@ -92,6 +96,7 @@ def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500, sigma=10):
     _sigma = sigma # from function definition, default is 10
     n = len(data)
 
+    """
     stepX = math.floor(rangeX/numBins)
     stepY = math.floor(rangeY/numBins)
     for _x in range(numBins):
@@ -104,44 +109,134 @@ def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500, sigma=10):
 
     histogram = histogram/n #as per formula, divide by n
     maxBin = np.max(histogram)
-
-    ## DEBUG
-    #print(maxBin)
-    #print(data)
-    #ind = np.where(histogram == np.max(histogram))
-    #print(ind)
-    #rng = 3
-    #print(histogram[int(ind[0])-rng:int(ind[0])+rng+1, int(ind[1])-rng:int(ind[1])+rng+1])
+    """
 
     #Task 4 - Create the buffers, execute the OpenCL code and fetch the results 
+    nObs = len(data)
+    xObs = np.array([row[0] for row in data], dtype=np.float32)
+    yObs = np.array([row[1] for row in data], dtype=np.float32)
+    
     ctx = cl.create_some_context()
     queue = cl.CommandQueue(ctx)
 
     mf = cl.mem_flags
-    a_g = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=histogram)
-    b_g = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=histogram)
-    
+
+    g_xObs = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=xObs)
+    g_yObs = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=yObs)
+
     prg = cl.Program(ctx, """
-    __kernel void sum(
-        __global const float *a_g, __global const float *b_g, __global float *res_g)
-    {
-    int gid = get_global_id(0);
-    res_g[gid] = a_g[gid] + b_g[gid];
+    float isotropicGaussKernel2DCL(float x, float y, float center_x, float center_y, float sigma)
+    {   
+        int amp = 1;
+        float xterm = pow(x - center_x, 2) / (2*pow(sigma, 2));
+        float yterm = pow(y - center_y, 2) / (2*pow(sigma, 2));
+        float val = amp * exp( -(xterm + yterm) );
+        return val;
+    }
+
+    __kernel void DensityEstimation(__global float *observationsX, __global float *observationsY,
+        unsigned long numObservations, float sigma,
+        float minX, float maxX, float minY, float maxY,
+        long numBins, __global float *kde_image) {
+            int index = get_global_id(0); // same as blockIdx.x * blockDim.x + threadIdx.x apparently...
+
+            float rangeX = maxX - minX;
+            float rangeY = maxY - minY;
+            int stepX = floor(rangeX/numBins);
+            int stepY = floor(rangeY/numBins);
+
+            for (int _y = 0; _y < int(numBins); _y++){
+                float thisY = ( (minY + _y*stepY) );
+                for (int _x = 0; _x < int(numBins); _x++){
+                    float this_kde = 0.0;
+                    float thisX = ( (minX + _x*stepX) );
+                    for (int n = 0; n < int(numObservations); n++){
+                            this_kde += ( isotropicGaussKernel2DCL(observationsX[n], observationsY[n],
+                                    thisX, thisY, sigma) /sigma );
+                    }
+                    kde_image[index + _y*64 + _x] = this_kde;
+                }
+                //kde_image[index + j*64 ] += this_kde;
+                //kde_image[index + j*_y] += this_kde; // wild 2d shit that may be in the wrong order
+                //kde_image[index + j] = this_kde; // only one row, all cols
+                //kde_image[index] = this_kde; // nothing
+            }
+            //kde_image[100] = 10;
+            //kde_image[_y] = 10;
+            //kde_image = kde_image/float(numObservations);
     }
     """).build()
 
-    res_g = cl.Buffer(ctx, mf.WRITE_ONLY, histogram.nbytes)
-    prg.sum(queue, histogram.shape, None, a_g, b_g, res_g)
+    res_kde = np.zeros((numBins,numBins), dtype=np.float32)
+    g_kde_image = cl.Buffer(ctx, mf.WRITE_ONLY, res_kde.nbytes)
+    #prg.DensityEstimation( queue, res_kde.shape, None,
+    prg.DensityEstimation( queue, (64, 64), None,
+        g_xObs, g_yObs, np.int32(nObs), np.float32(_sigma),
+        np.float32(minX), np.float32(maxX), np.float32(minY), np.float32(maxY),
+        np.int32(numBins), g_kde_image )
+    kde_image = np.empty_like(res_kde)
+    cl.enqueue_copy(queue, kde_image, g_kde_image)
 
-    res_np = np.empty_like(histogram)
-    cl.enqueue_copy(queue, res_np, res_g)
+    kde_image = kde_image /nObs
+    maxBin = float(np.max(kde_image))
+    # print(xObs)
+    # print(yObs)
+    # print(kde_image.shape)
+    # print(kde_image[0])
+    # print(histogram.shape)
+    # print(histogram[0])
+    # print(np.max(histogram))
+    # print(maxBin)
+
+    ### DEBUG
+
+    # a = xObs
+    # b = yObs
+    # a_g = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=a)
+    # b_g = cl.Buffer(ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=b)
     
-    print(np.max(histogram))
-    print(np.max(res_np))
-    print(np.where(histogram == np.max(histogram)))
-    print(np.where(res_np == np.max(res_np)))
+    # prg = cl.Program(ctx, """
+    # __kernel void sum(
+    #     const int n, __global const float *a_g, __global const float *b_g, __global float *res_g)
+    # {
+    # //int index = blockIdx.x * blockDim.x + threadIdx.x;
+    # int index = get_global_id(0);
+    # int stride = get_global_id(1);
+    # //int stride = blockDim.x * gridDim.x;
+    # int cnt = 0;
+    # for(int i = index; i < n; i ++){
+    #     res_g[i+cnt] = a_g[i];
+    #     cnt++;
+    #     res_g[i+cnt] = b_g[i];
+    #     //res_g[i] = a_g[i] + b_g[i];
+    # }
 
-    return json.dumps({"minX": minDep, "maxX": maxDep, "minY": minArr, "maxY": maxArr, "maxVal": maxBin, "maxBin": int(maxBin), "histogram": histogram.ravel().tolist()})                
+    
+    # //int i = get_global_id(1);
+    # //for (int k =0; k< size; k++){
+    # //    res_g[i + size*k] = a_g[i + size*k] + b_g[i + size*k];
+    # //}
+    
+    # }
+    # """).build()
+
+    # res_shape = np.zeros((10, ), dtype = np.float32)   
+    # res_g = cl.Buffer(ctx, mf.WRITE_ONLY, res_shape.nbytes)
+    # prg.sum(queue, res_shape.shape, None, np.int32(len(a)), a_g, b_g, res_g)
+
+    # test = np.array([ 8., 19.,  8., -4., 34., 7., 19.])
+    # #res_np = np.empty_like((1,1,1,1,1,1,1,1,1,1), dtype=np.float32)
+    # res_np = np.empty_like(res_shape)
+    # cl.enqueue_copy(queue, res_np, res_g)
+    # print(res_np.shape)
+    # print("a: ", a)
+    # print("b: ", b)
+    # print(res_np)
+    # print(a+b)
+    #print((a+b) == res_np)
+
+    return json.dumps({"minX": minDep, "maxX": maxDep, "minY": minArr, "maxY": maxArr, "maxVal": maxBin, "maxBin": int(maxBin), "histogram": kde_image.ravel().tolist()})                
+    #return json.dumps({"minX": minDep, "maxX": maxDep, "minY": minArr, "maxY": maxArr, "maxVal": maxBin, "maxBin": int(maxBin), "histogram": histogram.ravel().tolist()})                
     #return json.dumps({"minX": minDep, "maxX": maxDep, "minY": minArr, "maxY": maxArr, "maxBin": int(maxBin), "histogram": histogram.ravel().tolist()})
 
 if __name__ == "__main__":
@@ -157,7 +252,7 @@ if __name__ == "__main__":
     conn = sqlite3.connect("data/flights.db")
     cursor = conn.cursor()
 
-    sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real') LIMIT 10"
+    sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real') LIMIT 100"
     # this query is slow at server start-up, but the histogram is quick to compute on the CPU
     #sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real')  ORDER BY RANDOM() LIMIT 50000"
     # this query is quick, but just gives us the first 50000 items (remove the LIMITS 50000 to get all data points)
@@ -170,16 +265,6 @@ if __name__ == "__main__":
     print("data stored")
 
     #Task 4 - Setup and configure pyopencl
-    clProgram = cl.Program(ctx, """
-    float isotropicGaussKernel2DCL(float x, float y, float center_x, float center_y, float sigma)
-    {
-
-    }
-    __kernel void DensityEstimation(__global float *observationsX, __global float *observationsY, unsigned long numObservations,
-    float sigma, float minX, float maxX, float minY, float maxY, __global float *kde_image, unsigned long numBins) {
-
-    }
-    """).build()
 
     # Set up the development server on port 8002.
     app.debug = False
