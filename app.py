@@ -96,7 +96,7 @@ def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500, sigma=10):
     _sigma = sigma # from function definition, default is 10
     n = len(data)
 
-    """
+    start = time.time()
     stepX = math.floor(rangeX/numBins)
     stepY = math.floor(rangeY/numBins)
     for _x in range(numBins):
@@ -109,9 +109,12 @@ def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500, sigma=10):
 
     histogram = histogram/n #as per formula, divide by n
     maxBin = np.max(histogram)
-    """
-
+    end = time.time()
+    print("CPU: ", end - start)
+    
     #Task 4 - Create the buffers, execute the OpenCL code and fetch the results 
+    start = time.time()
+
     nObs = len(data)
     xObs = np.array([row[0] for row in data], dtype=np.float32)
     yObs = np.array([row[1] for row in data], dtype=np.float32)
@@ -148,7 +151,7 @@ def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500, sigma=10):
             for (int _y = 0; _y < int(numBins); _y++){
                 float thisY = ( (minY + _y*stepY) );
                 for (int _x = 0; _x < int(numBins); _x++){
-                    float this_kde = 0.0;
+                    long double this_kde = 0.0;
                     float thisX = ( (minX + _x*stepX) );
                     for (int n = 0; n < int(numObservations); n++){
                             this_kde += ( isotropicGaussKernel2DCL(observationsX[n], observationsY[n],
@@ -170,23 +173,26 @@ def computeDataCPU(numBins=64,minX=-100,maxX=500,minY=-100,maxY=500, sigma=10):
     res_kde = np.zeros((numBins,numBins), dtype=np.float32)
     g_kde_image = cl.Buffer(ctx, mf.WRITE_ONLY, res_kde.nbytes)
     #prg.DensityEstimation( queue, res_kde.shape, None,
-    prg.DensityEstimation( queue, (64, 64), None,
+    prg.DensityEstimation( queue, (1, 1), None,
         g_xObs, g_yObs, np.int32(nObs), np.float32(_sigma),
         np.float32(minX), np.float32(maxX), np.float32(minY), np.float32(maxY),
         np.int32(numBins), g_kde_image )
     kde_image = np.empty_like(res_kde)
     cl.enqueue_copy(queue, kde_image, g_kde_image)
-
+    kde_image = np.nan_to_num(kde_image)
     kde_image = kde_image /nObs
     maxBin = float(np.max(kde_image))
-    # print(xObs)
+    end = time.time()
+    print("GPU: ", end - start)
+
+    print(xObs)
     # print(yObs)
     # print(kde_image.shape)
-    # print(kde_image[0])
-    # print(histogram.shape)
-    # print(histogram[0])
-    # print(np.max(histogram))
-    # print(maxBin)
+    print(kde_image[0])
+    #print(histogram.shape)
+    print(histogram[0])
+    print(np.max(histogram))
+    print(maxBin)
 
     ### DEBUG
 
@@ -257,7 +263,7 @@ if __name__ == "__main__":
     #sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real')  ORDER BY RANDOM() LIMIT 50000"
     # this query is quick, but just gives us the first 50000 items (remove the LIMITS 50000 to get all data points)
     # Task 3 - Lower the number of datapoints, set LIMIT to 10
-    #sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real')  ORDER BY RANDOM() LIMIT 10"
+    #sql = "SELECT DepDelay, ArrDelay FROM ontime WHERE TYPEOF(ArrDelay) IN ('integer', 'real')  ORDER BY RANDOM() LIMIT 400"
 
     cursor.execute(sql)
     data = cursor.fetchall()
