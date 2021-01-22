@@ -34,7 +34,7 @@ form {
     </div>
 
     <div class="div-1">
-        Select Colorbar && Sigma: 
+        Select Colorbar | Sigma | Engine | Visualization Style: 
     </div>
 
     <form>
@@ -50,6 +50,22 @@ form {
             <input type="range" min="1" max="30" value="10" class="slider" id="sigma" onchange="queryData()"
             oninput="this.nextElementSibling.value = this.value">
             <output>10</output>
+
+            <div class="col-auto my-1">
+                <label class="mr-sm-2 sr-only" for="runtimeSelector">Select Colormap</label>
+                <select class="custom-select mr-sm-2" id="runtimeSelector" onchange="queryData()">
+                <option value="cpu">CPU</option>
+                <option value="gpu">GPU</option>
+                </select>
+            </div>
+            <div class="col-auto my-1">
+                <label class="mr-sm-2 sr-only" for="vizStyleSelector">Select Visualization Style</label>
+                <select class="custom-select mr-sm-2" id="vizStyleSelector" onchange="queryData()">
+                <option value="log">Log</option>
+                <option value="linear">Linear</option>
+                </select>
+            </div>
+        </div>
     </form>
 
 
@@ -73,16 +89,25 @@ form {
         uniform sampler2D kdeResult;
         uniform float maxIntensity;
         uniform sampler2D colorbarImage;
+        uniform bool visualization_log;
 
         void main() {
             //Task 2 - Calculate the corresponding value for the colorbar and set the color to the fragment
 
             // texture.st gives the texture coords, in our case the value in the array :-)
             float thiskde = texture2D(kdeResult, vertexUV).s;
-            // scale between 0.0 and 1.0 by dividing through maxIntensity
-            //float thiscol = thiskde/maxIntensity; 
-            //float thiscol = log(thiskde+1.0)/log(maxIntensity+1.0);
-            float thiscol = log(thiskde*10000000.0)/log(maxIntensity*10000000.0);
+            
+            float thiscol = 0.0;
+            
+            if (visualization_log == true) {
+                //thiscol = log(thiskde+1.0)/log(maxIntensity+1.0);
+                thiscol = log(thiskde*10000000.0)/log(maxIntensity*10000000.0);
+            }
+            else if (visualization_log == false) {
+                // scale between 0.0 and 1.0 by dividing through maxIntensity
+                thiscol = thiskde/maxIntensity; 
+            }
+            
 
             // color fragment as per colorbar specified
             gl_FragColor = texture2D(colorbarImage, vec2(thiscol, 1.0));
@@ -127,8 +152,9 @@ form {
             document.getElementById("computing_hint").style.visibility = "visible";
 
             sigma = document.getElementById("sigma").value;
+            runtime = document.getElementById("runtimeSelector").value;
 
-            d3.json("/data/" + resolution + "/" + minX + "/" + maxX + "/" + minY + "/" + maxY + "/" + sigma + "", function (data) {
+            d3.json("/data/" + resolution + "/" + minX + "/" + maxX + "/" + minY + "/" + maxY + "/" + sigma + "/" + runtime + "", function (data) {
 
                 // coordinate conversions
                 var x = d3.scale.linear()
@@ -243,8 +269,23 @@ form {
                     drawContextInitialized = true;
                 }                
 
+                // Load colorbar from CSS selector
                 var colorbar = "./viridis";
-                colorbar = document.getElementById("colormapSelector").value
+                colorbar = document.getElementById("colormapSelector").value;
+
+                // set visualization style (linear/log)
+                var visualizationStyle = "log";
+                // use a boolean for the uniform rather than a string
+                var visualization_log = true;
+                visualizationStyle = document.getElementById("vizStyleSelector").value;
+
+                if (visualizationStyle === "log"){
+                    visualization_log = true;
+                }
+                else if (visualizationStyle === "linear"){
+                    visualization_log = false;
+                }
+
 
                 new THREE.TextureLoader().load(colorbar, function (texture) {
                     colorbarImage = texture;
@@ -264,6 +305,9 @@ form {
                         },
                         maxIntensity: {
                             value: maxIntensity
+                        },
+                        visualization_log: {
+                            value: visualization_log
                         }
                     };
 
@@ -308,11 +352,18 @@ form {
             var diffY = moveEndY - moveStartY;
 
             //console.log("mouseup" + " " + diffX + " " + diffY);
-            minX = Math.round(minX - diffX*diffScale);
-            minY = Math.round(minY + diffY*diffScale);
-            maxX = Math.round(maxX - diffX*diffScale);
-            maxY = Math.round(maxY + diffY*diffScale);
-            queryData();
+            // check if the movement was on the grid to reduce wait times...
+            if (40 <= moveEndX & moveEndX <= 630) {
+                if (112 <= moveEndY & moveEndY <= 712){
+                    console.log(moveEndX, moveEndY)
+                    console.log("COMPUTING")
+                    minX = Math.round(minX - diffX*diffScale);
+                    minY = Math.round(minY + diffY*diffScale);
+                    maxX = Math.round(maxX - diffX*diffScale);
+                    maxY = Math.round(maxY + diffY*diffScale);
+                    queryData();
+                }
+            }
         }
 
         window.onmousemove = function (evt) {
